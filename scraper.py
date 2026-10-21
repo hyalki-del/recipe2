@@ -25,25 +25,27 @@ if response.status_code == 200:
   aciklama = []
 
   if entry_content:
-    # Sayfa içinde etiketlerin, sosyal medya butonlarının olduğu gereksiz alt elementleri siliyoruz
+    # Sayfa yapısındaki etiket, paylaşım ve benzeri class'ları çöpe atıyoruz
     for unwanted in entry_content.select(
-        '.tags, .post-tags, .share-buttons, .social-links, .kategoriler'
+        '.tags, .post-tags, .share-buttons, .social-links, .kategoriler,'
+        ' .container-fluid, .sayfa-container'
     ):
       unwanted.decompose()
 
-    # Tüm satırları alıyoruz
-    lines = [
-        line.strip()
-        for line in entry_content.get_text(separator='\n').split('\n')
-        if line.strip()
-    ]
+    # Sadece metin içeren paragraf (<p>) ve liste/satır elemanlarını hedefleyelim
+    # Böylece site şablonundaki yan unsurlar içeriğe sızamaz.
+    lines = []
+    for p in entry_content.find_all(['p', 'li', 'div']):
+      text = p.get_text(strip=True)
+      if text and text not in lines:
+        lines.append(text)
 
     is_aciklama = False
 
     for line in lines:
       line_lower = line.lower()
 
-      # Etiket, sosyal medya veya tarih gibi kalıntıları içeren satırları atla
+      # İstenmeyen kelime ve kalıntıları ele
       if any(
           kw in line_lower
           for kw in [
@@ -58,15 +60,16 @@ if response.status_code == 200:
               'arda türkmen',
               'tv show',
               'cnn turk',
+              'bunu paylaş',
           ]
       ):
         continue
 
-      # Çok fazla virgül içeren (hashtag listesi olan) satırları kesinlikle alma
-      if line.count(',') > 2 or line.count(' , ') > 1:
+      # Virgülle ayrılmış etiket listesi satırlarını ele
+      if line.count(',') > 2:
         continue
 
-      # Tarifin yapılış adımlarını ayırt etme
+      # Tarif adımlarını ayırma mantığı
       if (
           any(
               fiil in line_lower
@@ -94,7 +97,7 @@ if response.status_code == 200:
       else:
         aciklama.append(line)
 
-  # 3. JSON verisini oluşturuyoruz
+  # 3. JSON veri yapısını oluşturuyoruz
   data = {
       'yemek_adi': yemek_adi,
       'malzemeler': malzemeler,
@@ -104,6 +107,6 @@ if response.status_code == 200:
   with open('tarif.json', 'w', encoding='utf-8') as f:
     json.dump(data, f, ensure_ascii=False, indent=4)
 
-  print('Temizleme başarılı, tarif.json güncellendi.')
+  print('Kalıntılar temizlendi, tarif.json güncellendi.')
 else:
   print(f'Sayfaya erişilemedi. Hata kodu: {response.status_code}')

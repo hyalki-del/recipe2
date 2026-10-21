@@ -9,30 +9,33 @@ response = requests.get(url, headers=headers)
 
 if response.status_code == 200:
   soup = BeautifulSoup(response.content, 'html.parser')
+
+  # 1. Sayfanın ana başlığını (<title>) çekiyoruz
+  title_tag = soup.find('title')
+  if title_tag:
+    # Genellikle başlıklar "Cajun Baharatlı Tavuk Fırın Patates - Arda'nın Mutfağı" şeklinde gelir.
+    # Sadece yemek adını almak için tire (-) işaretine göre bölüp ilk kısmı alabiliriz.
+    full_title = title_tag.get_text(strip=True)
+    yemek_adi = full_title.split('-')[0].strip()
+  else:
+    yemek_adi = 'Bilinmeyen Yemek'
+
+  # 2. İçerik kısmını alıp malzemeler ve açıklama olarak ayırıyoruz
   entry_content = soup.find(class_='entry-content')
 
+  malzemeler = []
+  aciklama = []
+
   if entry_content:
-    # Tüm satırları ayrı ayrı alıyoruz (\n karakterine göre bölüyoruz)
     lines = [
         line.strip()
         for line in entry_content.get_text(separator='\n').split('\n')
         if line.strip()
     ]
 
-    malzemeler = []
-    aciklama = []
-
-    # Basit bir mantık: İçinde yemek hazırlama fiilleri veya anlatım geçenler açıklama,
-    # kısa ve genellikle miktar/malzeme adı içerenler malzeme listesidir.
-    # Veya site yapısına göre genelde ilk satırlar malzeme, sonrakiler tariftir.
-
-    # Arda'nın Mutfağı formatı için örnek bir ayrıştırma mantığı:
-    # Genellikle "Beğen", "Yorum Yaz", "Kategoriler" gibi alt kısımları ayıklamak gerekir.
-
     is_aciklama = False
 
     for line in lines:
-      # Sosyal medya butonları, kategori ve etiketleri listeye dahil etmiyoruz
       if any(
           keyword in line.lower()
           for keyword in [
@@ -47,7 +50,6 @@ if response.status_code == 200:
       ):
         continue
 
-      # Eğer cümle içinde tarif fiilleri geçmeye başladıysa veya uzun bir anlatımsa "açıklama" kısmına atıyoruz
       if (
           any(
               fiil in line.lower()
@@ -75,15 +77,19 @@ if response.status_code == 200:
       else:
         aciklama.append(line)
 
-    # JSON veri yapısı
-    data = {'malzemeler': malzemeler, 'aciklama': ' '.join(aciklama)}
+  # 3. JSON veri yapısını oluşturuyoruz
+  data = {
+      'yemek_adi': yemek_adi,
+      'malzemeler': malzemeler,
+      'aciklama': ' '.join(aciklama),
+  }
 
-    # JSON dosyasına yazma
-    with open('tarif.json', 'w', encoding='utf-8') as f:
-      json.dump(data, f, ensure_ascii=False, indent=4)
+  # JSON dosyasına yazma
+  with open('tarif.json', 'w', encoding='utf-8') as f:
+    json.dump(data, f, ensure_ascii=False, indent=4)
 
-    print('Malzemeler ve açıklama başarıyla ayrıştırılıp JSON kaydedildi.')
-  else:
-    print("Hedef sınıf ('entry-content') sayfada bulunamadı.")
+  print(
+      'Yemek adı, malzemeler ve açıklama başarıyla JSON dosyasına kaydedildi.'
+  )
 else:
   print(f'Sayfaya erişilemedi. Hata kodu: {response.status_code}')

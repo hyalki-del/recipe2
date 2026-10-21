@@ -44,7 +44,7 @@ def tarifi_cek(url):
     return "İçerik alanı bulunamadı."
 
 # Kullanım
-url = "KAYNAK_TARIF_URLSI_BURAYA"
+url = "https://www.ardaninmutfagi.com/yemek-tarifleri/tavuk-yemekleri/cajun-baharatli-tavuk-firin-patates"
 tarif_aciklamasi = tarifi_cek(url)
 
 veri = {

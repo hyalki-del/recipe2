@@ -1,13 +1,13 @@
 name: Arda'nın Mutfağı Scraper
 
 on:
-  workflow_dispatch: # Manuel olarak GitHub panelinden çalıştırabilmek için
+  workflow_dispatch:
   schedule:
-    - cron: '0 8 * * *' # İsteğe bağlı: Her gün sabah saat 08:00'de otomatik çalışır
+    - cron: '0 8 * * *'
 
 jobs:
   scrape:
-  runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Kodları depodan al
         uses: actions/checkout@v4

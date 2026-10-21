@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup
+import json
 import requests
 
 url = 'https://www.ardaninmutfagi.com/yemek-tarifleri/tavuk-yemekleri/cajun-baharatli-tavuk-firin-patates'
@@ -10,18 +11,20 @@ response = requests.get(url, headers=headers)
 
 if response.status_code == 200:
   soup = BeautifulSoup(response.content, 'html.parser')
-
-  # "entry-content" sınıfını bul
   entry_content = soup.find(class_='entry-content')
 
   if entry_content:
-    # Tüm HTML etiketlerini temizleyip düz metin (plain text) alıyoruz
+    # Tüm metni düz metin olarak alıyoruz
     plain_text = entry_content.get_text(separator='\n', strip=True)
-    print(plain_text)
 
-    # İsteğe bağlı: Çıktıyı bir .txt dosyasına kaydetmek isterseniz:
-    # with open("tarif.txt", "w", encoding="utf-8") as f:
-    #     f.write(plain_text)
+    # Kaydedilecek veri yapısı
+    data = {'url': url, 'content': plain_text}
+
+    # JSON dosyasına yazma
+    with open('tarif.json', 'w', encoding='utf-8') as f:
+      json.dump(data, f, ensure_ascii=False, indent=4)
+
+    print('Tarif başarıyla tarif.json dosyasına kaydedildi.')
   else:
     print("Hedef sınıf ('entry-content') sayfada bulunamadı.")
 else:

@@ -14,17 +14,20 @@ if response.status_code == 200:
   entry_content = soup.find(class_='entry-content')
 
   if entry_content:
-    # Tüm metni düz metin olarak alıyoruz
-    plain_text = entry_content.get_text(separator='\n', strip=True)
+    # Tüm metni alıyoruz
+    plain_text = entry_content.get_text(separator=' ', strip=True)
 
-    # Kaydedilecek veri yapısı
-    data = {'url': url, 'content': plain_text}
+    # Aradaki fazla boşlukları ve alt alta geçişleri (\n veya \r) tek boşluğa indiriyoruz
+    cleaned_text = ' '.join(plain_text.split())
+
+    # Sadece içeriği içeren JSON yapısı (url alanı çıkarıldı)
+    data = {'content': cleaned_text}
 
     # JSON dosyasına yazma
     with open('tarif.json', 'w', encoding='utf-8') as f:
       json.dump(data, f, ensure_ascii=False, indent=4)
 
-    print('Tarif başarıyla tarif.json dosyasına kaydedildi.')
+    print('Tarif başarıyla temizlenerek tarif.json dosyasına kaydedildi.')
   else:
     print("Hedef sınıf ('entry-content') sayfada bulunamadı.")
 else:

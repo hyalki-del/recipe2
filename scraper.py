@@ -1,51 +1,50 @@
 from bs4 import BeautifulSoup
 import requests
 import json
-import re
 
 def tarifi_cek(url):
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     response = requests.get(url, headers=headers)
     
     if response.status_code != 200:
-        print("Sayfaya ulaşılamadı!")
+        print(f"Sayfaya ulaşılamadı: {url}")
         return None
 
     soup = BeautifulSoup(response.content, 'html.parser')
 
-    # DİKKAT: Sitenizin HTML yapısına göre ana içeriğin bulunduğu class'ı buraya yazmalısınız.
-    # Genellikle yemek sitelerinde içerik şu class'lardan birinin içindedir:
-    # Örnekler: div.entry-content, div.tarif-detay, div.post-content vb.
-    icerik_alani = soup.find('div', class_='entry-content') # Sitenize göre burayı güncelleyin
+    # 1. ADIM: Sadece ana tarif gövdesinin bulunduğu üst kapsayıcıyı seçiyoruz.
+    # (Böylece sidebar, header, footer ve ana menüler baştan oyun dışı kalır.)
+    icerik_alani = soup.find('div', class_='entry-content') # WordPress sitelerinde standarttır
     
     if not icerik_alani:
-        # Eğer özel bir class bulunamazsa tüm body'yi alıp temizleme yapabiliriz ama üstteki her zaman daha iyidir.
-        icerik_alani = soup
+        # Eğer site farklı bir etiket kullanıyorsa alternatif ana kapsayıcıları deneyebiliriz:
+        icerik_alani = soup.find('article') or soup.find('div', class_='post-content')
 
-    # Sosyal medya butonları, tarih, kategori ve etiketleri (istediğiniz fazlalıkları) barındıran 
-    # etiketleri BeautifulSoup ile metinden ayıklayarak siliyoruz (çıkartıyoruz):
-    for fazlalik in icerik_alani.select('.sharedaddy, .cat-links, .tags-links, .post-meta, .yorum-kutusu'):
-        fazlalik.decompose()
+    if icerik_alani:
+        # 2. ADIM: Kelime aramak yerine, bu içerik kutusunun *içerisinde* alt kısımda 
+        # yer alan yapısal elementleri (HTML taglerini) yerleşkesine göre bulup çöpe atıyoruz (decompose).
+        # Bu etiketler genellikle sosyal paylaşım, footer veya meta alanlarıdır.
+        istenmeyen_yapilar = icerik_alani.select(
+            '.sharedaddy, '          # Sosyal medya paylaşım blokları
+            '.post-footer, '          # Yazı sonu alanı
+            '.cat-links, '            # Kategoriler bloğu
+            '.tags-links, '           # Etiketler bloğu
+            '.yarisma-meta, '         # Varsa ek meta alanları
+            'div[style*="clear"]'     # Temizlik divleri
+        )
+        
+        for yapi in istenmeyen_yapilar:
+            yapi.decompose() # Bu HTML bloğunu sayfadan tamamen söküp atar
 
-    # Sadece metni alalım ve gereksiz boşlukları temizleyelim
-    ham_metin = icerik_alani.get_text(separator='\n', strip=True)
+        # 3. ADIM: Geriye sadece tarifin yazılı olduğu saf HTML blokları kalır.
+        # Sadece bu alanın metnini alıyoruz.
+        temiz_metin = icerik_alani.get_text(separator='\n', strip=True)
+        return temiz_metin
 
-    # İsteğe bağlı: Metnin başındaki veya sonundaki "Yayın tarihi...", "Beğen" gibi kalıntıları 
-    # Regex veya string bölme işlemleriyle tamamen temizleyelim:
-    # Örneğin "Yayın tarihi" ifadesinden öncesini/sonrasını ayırabilirsiniz:
-    if "Yayın tarihi" in ham_metin:
-        # Tarif genelde yayın tarihinden *önce* başlar
-        temiz_aciklama = ham_metin.split("Yayın tarihi")[0].strip()
-    else:
-        temiz_aciklama = ham_metin
+    return "İçerik alanı bulunamadı."
 
-    # Eğer metin içinde "Beğen Yorum Yaz" gibi ifadeler kaldıysa onları da temizleyelim:
-    temiz_aciklama = re.sub(r'\d+\s+Beğen.*', '', temiz_aciklama).strip()
-
-    return temiz_aciklama
-
-# JSON'a kaydetme kısmı
-url = "KAYNAK_URL_BURAYA"
+# Kullanım
+url = "KAYNAK_TARIF_URLSI_BURAYA"
 tarif_aciklamasi = tarifi_cek(url)
 
 veri = {
@@ -53,6 +52,6 @@ veri = {
 }
 
 with open("tarif.json", "w", encoding="utf-8") as f:
-     json.dump(veri, f, ensure_ascii=False, indent=4)
+    json.dump(veri, f, ensure_ascii=False, indent=4)
 
-print("İşlem tamamlandı, temizlenen açıklama JSON dosyasına yazıldı!")
+print("Tarif başarıyla ve kelime filtresine takılmadan çekildi!")

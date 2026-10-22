@@ -1,47 +1,35 @@
-name: Extract Materials and Units
+name: Malzeme Listesi Guncelle
 
 on:
   push:
-    paths:
-      - 'rec.json'
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  process:
+  build:
+  # Omit or structure standard ubuntu runner for Python execution
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Botun repository'ye dosya yazabilmesi için ŞARTTIR
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Depoyu Kopyala (Checkout)
+        uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Python Kurulumu
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Run Extraction Script
+      - name: Gerekli Kutuphaneleri Yukle
         run: |
-          # Önce rec.json'u rec.csv'ye çeviren Python kodunuz
-          python3 -c '
-          import json, csv
-          with open("rec.json", "r", encoding="utf-8") as f:
-              data = json.load(f)
-          if isinstance(data, dict): data = [data]
-          if data:
-              with open("rec.csv", "w", newline="", encoding="utf-8") as f:
-                  writer = csv.DictWriter(f, fieldnames=data[0].keys())
-                  writer.writeheader()
-                  writer.writerows(data)
-          '
-          
-          # Şimdi malzeme ve birimleri özetleyen Python kodunu çalıştıralım
-          python3 extract_materials.py
+          pip install pandas openpyxl
 
-      - name: Commit and push generated CSV
+      - name: Python Scriptini Calistir
+        run: |
+          python malzeme_listesi_olustur.py
+
+      - name: Degisiklikleri Kaydet ve GitHub'a Gonder
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add malzeme_birim_ozet.csv rec.csv
-          git commit -m "Auto-generate malzeme_birim_ozet.csv via GitHub Actions" || exit 0
+          git add sadece_benzersiz_malzemeler.csv
+          git commit -m "Otomatik guncellendi: Benzersiz malzeme listesi" || echo "Degisiklik yok"
           git push

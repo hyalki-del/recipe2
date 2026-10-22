@@ -1,7 +1,12 @@
 import csv
 import re
 
-# 1. Adım: rec.csv dosyasından doğrudan verileri okuyup benzersiz malzeme-birim ikililerini çıkaralım
+# 1. Adım: Veri dosyasını oku (rec.csv)
+# Eğer doğrudan rec.json kullanıyorsanız, json modülüyle de okunabilir.
+input_file = "rec.csv"
+output_file = "malzeme_birim_ozet.csv"
+
+# Tanımlı mutfak birimleri listesi (rakam/kesirlerden sonra gelen anahtar kelimeler)
 units_list = [
     "su bardağı",
     "çay bardağı",
@@ -33,57 +38,80 @@ units_list = [
     "fiske",
 ]
 
-unique_pairs = set()
+material_units = {}
 
 try:
-  with open("rec.csv", mode="r", encoding="utf-8") as csv_file:
+  with open(input_file, mode="r", encoding="utf-8") as csv_file:
     reader = csv.DictReader(csv_file)
     for row in reader:
-      malzemeler_text = row.get("malzemeler", "")
-      lines = str(malzemeler_text).split("\n")
+      m_text = str(row.get("malzemeler", ""))
+      lines = m_text.split("\n")
 
       for line in lines:
         line = line.strip()
-        # Başlık ve ara başlıkları ele
+        # Başlık ve ara başlıkları eleyelim
         if not line or "Malzemeleri" in line or (
             "için" in line and len(line) < 30
         ):
           continue
 
-        # Sayıları ve kesirleri temizle
-        clean = re.sub(
-            r"^[\d\/\-\.\s–½¼¾⅓⅔⅛⅜⅝⅞]+", "", line
-        ).strip()
+        # Rakamlardan veya kesirli sayılardan (½, 1/2 vb.) sonraki kısmı ayır
+        match = re.match(r"^([\d\/\-\.\s–½¼¾⅓⅔⅛⅜⅝⅞]+)(.*)$", line)
+        if match:
+          rest = match.group(2).strip()
+        else:
+          rest = line
 
         found_unit = "belirtilmemiş"
-        found_item = clean
+        found_item = rest
 
-        # Birimi ayıkla
+        # Birimi metnin içinden en uzundan kısaya doğru eşleştir
         for u in sorted(units_list, key=len, reverse=True):
           pattern = r"^(" + re.escape(u) + r")\.?\s*(.*)$"
-          match = re.match(pattern, clean, re.IGNORECASE)
-          if match:
-            found_unit = match.group(1).lower()
-            found_item = match.group(2).strip()
+          m = re.match(pattern, rest, re.IGNORECASE)
+          if m:
+            found_unit = m.group(1).lower()
+            found_item = m.group(2).strip()
             break
 
         if found_item:
-          unique_pairs.add((found_item, found_unit))
+          mat_clean = found_item.strip()
+          mat_key = mat_clean.lower()
 
-  # 2. Adım: Yeni CSV dosyasını oluştur
+          # Mantıksal filtreleme (çok uzun satırları almamak için)
+          if 1 < len(mat_key) < 80:
+            if mat_key not in material_units:
+              material_units[mat_key] = {"original": mat_clean, "units": set()}
+            material_units[mat_key]["units"].add(found_unit)
+
+  # 2. Adım: Sonuçları her malzeme bir kez geçecek şekilde tabloya dök
+  result_rows = []
+  for mat_key, info in material_units.items():
+    orig_name = info["original"]
+    units = sorted(list(info["units"]))
+
+    primary_unit = units[0] if units else "belirtilmemiş"
+    # Eğer birden fazla birim kullanılmışsa 3. kolona yazıyoruz
+    other_units = ", ".join(units[1:]) if len(units) > 1 else ""
+
+    result_rows.append({
+        "malzeme": orig_name,
+        "birim": primary_unit,
+        "diğer_birimler": other_units,
+    })
+
+  # 3. Adım: Yeni CSV dosyasına kaydet
   with open(
-      "malzeme_birim_kombinasyonlari.csv", mode="w", newline="", encoding="utf-8"
+      output_file, mode="w", newline="", encoding="utf-8"
   ) as out_file:
-    fieldnames = ["malzeme", "birim"]
+    fieldnames = ["malzeme", "birim", "diğer_birimler"]
     writer = csv.DictWriter(out_file, fieldnames=fieldnames)
     writer.writeheader()
-
-    for malzeme, birim in sorted(unique_pairs):
-      writer.writerow({"malzeme": malzeme, "birim": birim})
+    writer.writerows(result_rows)
 
   print(
-      "malzeme_birim_kombinasyonlari.csv başarıyla oluşturuldu! Toplam"
-      f" kombinasyon: {len(unique_pairs)}"
+      f"Analiz tamamlandı! '{output_file}' dosyası oluşturuldu. Toplam"
+      f" benzersiz malzeme: {len(result_rows)}"
   )
 
 except Exception as e:

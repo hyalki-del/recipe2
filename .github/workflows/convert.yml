@@ -5,9 +5,12 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# GitHub Actions botunun repoya yazma izni (403 hatasını önlemek için şarttır)
+permissions:
+  contents: write
+
 jobs:
   build:
-  # Omit or structure standard ubuntu runner for Python execution
     runs-on: ubuntu-latest
     steps:
       - name: Depoyu Kopyala (Checkout)

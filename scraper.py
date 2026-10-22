@@ -9,7 +9,7 @@ import requests
 BASE_CATEGORY_URL = (
     "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/page/{}/"
 )
-TOTAL_PAGES = 10  # İlk 10 sayfa
+TOTAL_PAGES = 10  # İlk 10 sayfa (İstediğiniz gibi ayarlayabilirsiniz)
 OUTPUT_FILE = "rec.json"
 
 HEADERS = {
@@ -17,7 +17,7 @@ HEADERS = {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
         " like Gecko) Chrome/122.0.0.0 Safari/537.36"
     ),
-    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en-US;q=0.7",
 }
 
 
@@ -78,7 +78,7 @@ def parse_recipe_detail(recipe_url):
     if not yemek_adi:
       return None
 
-    # 2. Malzemeler (Başlıklar temizlenir ve virgüllü formata dönüştürülür)
+    # 2. Malzemeler (Kesinlikle \n kalmayacak şekilde virgülle birleştirilir ve başlıklar ayıklanır)
     mlz_div = soup.find("div", class_="mlz")
     malzemeler = ""
     if mlz_div:
@@ -87,19 +87,28 @@ def parse_recipe_detail(recipe_url):
 
       cleaned_items = []
       for line in lines:
-        # "Malzemeleri" içeren başlık satırlarını veya yemek adını ele
-        if "malzemeleri" in line.lower() or "için malzemeler" in line.lower():
+        line_lower = line.lower()
+        # "Malzemeleri" veya ara başlık içeren satırları tamamen ele
+        if (
+            "malzemeleri" in line_lower
+            or "için malzemeler" in line_lower
+            or "malzemeler" in line_lower
+        ):
           continue
-        if yemek_adi and yemek_adi.lower() in line.lower():
+        if yemek_adi and yemek_adi.lower() in line_lower:
           continue
 
-        # Satır içindeki virgülleri de parçalayarak tekil malzeme öğelerine ayır
-        parts = [p.strip() for p in line.split(",") if p.strip()]
-        for part in parts:
-          if "malzemeler" in part.lower() or "malzemeleri" in part.lower():
-            continue
-          cleaned_items.append(part)
+        # Satır içindeki olası virgüllere göre de parçala
+        sub_parts = line.split(",")
+        for part in sub_parts:
+          p_clean = part.strip()
+          if p_clean:
+            p_lower = p_clean.lower()
+            if "malzemeler" in p_lower or "malzemeleri" in p_lower:
+              continue
+            cleaned_items.append(p_clean)
 
+      # Bütün malzemeleri \n yerine aralarına ", " koyarak tek satır yapıyoruz
       malzemeler = ", ".join(cleaned_items)
 
     if not malzemeler:

@@ -1,51 +1,66 @@
-def main():
-  all_recipes = []
-  scraped_links = set()
-  scraped_titles = set()
+from datetime import datetime
+import json
+import os
+import sys
+import time
+from bs4 import BeautifulSoup
+import requests
 
-  # Eğer daha önce kısmen yazılmış bir dosya varsa üstüne yazmamak için yükleyebiliriz
-  # Ama sıfırdan başlamak istiyorsak boş liste ile başlarız.
-  if os.path.exists(OUTPUT_FILE):
-    try:
-      with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
-        all_recipes = json.load(f)
-        for item in all_recipes:
-          scraped_titles.add(item.get("yemek adı"))
-    except:
-      pass
+URL = "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/"
+OUTPUT_FILE = "rec.json"
 
-  print("=== HIZLANDIRILMIŞ VE ANLIK KAYITLI VERİ ÇEKME BAŞLATILDI ===")
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
+        " like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+}
+
+
+def test_connection():
+  print(f"Bağlantı test ediliyor: {URL}")
   sys.stdout.flush()
 
-  for page in range(1, TOTAL_PAGES + 1):
-    print(f"\n[Sayfa {page}/{TOTAL_PAGES}] taranıyor...")
+  try:
+    response = requests.get(URL, headers=HEADERS, timeout=15)
+    print(f"HTTP Status Kodu: {response.status_code}")
     sys.stdout.flush()
 
-    links = get_recipe_links_from_page(page)
-    print(f"-> Ayıklanan gerçek tarif linki sayısı: {len(links)}")
+    if response.status_code != 200:
+      print(
+          "UYARI: Site isteği engelledi veya sayfa bulunamadı!"
+          f" Yanıt:\n{response.text[:500]}"
+      )
+      sys.stdout.flush()
+      return False
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    links = set()
+
+    for a in soup.find_all("a", href=True):
+      href = a["href"].strip()
+      if href.endswith("/"):
+        href = href[:-1]
+      if (
+          "ardaninmutfagi.com/yemek-tarifleri/" in href
+          and "/category/" not in href
+          and "/page/" not in href
+      ):
+        links.add(href)
+
+    print(f"Başarılı! İlk sayfada bulunan tarif linki sayısı: {len(links)}")
     sys.stdout.flush()
+    for l in list(links)[:5]:
+      print(f" - Örnek link: {l}")
+    sys.stdout.flush()
+    return True
 
-    for link in links:
-      norm_link = link[:-1] if link.endswith("/") else link
-      if norm_link not in scraped_links:
-        scraped_links.add(norm_link)
-        recipe_data = parse_recipe_detail(link)
-        if recipe_data:
-          yemek_adi = recipe_data["yemek adı"]
-          if yemek_adi not in scraped_titles:
-            scraped_titles.add(yemek_adi)
-            all_recipes.append(recipe_data)
+  except Exception as e:
+    print(f"Bağlantı sırasında kritik hata: {e}")
+    sys.stdout.flush()
+    return False
 
-            # HER TARİF BULUNDUĞUNDA ANINDA JSON DOSYASINA YAZ
-            with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-              json.dump(all_recipes, f, ensure_ascii=False, indent=4)
 
-            print(f"   [BAŞARILI ve KAYDEDİLDİ] {yemek_adi}")
-            sys.stdout.flush()
-        time.sleep(0.05)
-
-  print(
-      f"\n=== İŞLEM TAMAMLANDI! Toplam {len(all_recipes)} benzersiz tarif"
-      f" kaydedildi. ==="
-  )
-  sys.stdout.flush()
+if __name__ == "__main__":
+  test_connection()

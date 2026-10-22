@@ -34,24 +34,27 @@ def get_recipe_links_from_page(page_number):
       return []
 
     soup = BeautifulSoup(response.text, "html.parser")
-    links = []
+    links = set()  # Tekrarı önlemek için set kullanıyoruz
 
+    # Sadece içerik alanındaki tarif bağlantılarını hedefleyelim
+    # Sitedeki genel yapı genellikle article veya post class'ları içerisindedir
     for a in soup.find_all("a", href=True):
       href = a["href"]
+      # Kategori sayfaları, ana sayfa ve arşiv linklerini ayıklıyoruz
       if (
           "ardaninmutfagi.com/" in href
           and "/category/" not in href
+          and "/page/" not in href
           and href != "https://www.ardaninmutfagi.com/"
-          and href not in links
+          and href != "https://www.ardaninmutfagi.com"
       ):
-        links.append(href)
+        links.add(href)
 
-    return list(dict.fromkeys(links))
+    return list(links)
   except Exception as e:
     print(f"-> Sayfa çekilirken hata oluştu {url}: {e}")
     sys.stdout.flush()
     return []
-
 
 def parse_recipe_detail(recipe_url):
   try:

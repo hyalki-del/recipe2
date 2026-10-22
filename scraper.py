@@ -6,8 +6,10 @@ import time
 from bs4 import BeautifulSoup
 import requests
 
-# Tek bir sayfa için hedef kategori URL'si (Ramazan tarifleri 1. sayfa)
-TARGET_PAGE_URL = "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/"
+BASE_CATEGORY_URL = (
+    "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/page/{}/"
+)
+TOTAL_PAGES = 10  # İlk 10 sayfa olarak sınırlandırıldı
 OUTPUT_FILE = "rec.json"
 
 HEADERS = {
@@ -29,13 +31,15 @@ def clean_url(url):
   return url
 
 
-def get_recipe_links_from_single_page(url):
-  """Sadece belirtilen tek bir sayfadan tarif linklerini toplar."""
+def get_recipe_links_from_page(page_number):
+  if page_number == 1:
+    url = "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/"
+  else:
+    url = BASE_CATEGORY_URL.format(page_number)
+
   try:
-    print(f"Bağlanılıyor: {url}")
     response = requests.get(url, headers=HEADERS, timeout=10)
     if response.status_code != 200:
-      print(f"Hata: Sayfa yüklenemedi. HTTP Kod: {response.status_code}")
       return []
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -54,7 +58,6 @@ def get_recipe_links_from_single_page(url):
 
     return list(links)
   except Exception as e:
-    print(f"Bağlantı hatası: {e}")
     return []
 
 
@@ -75,11 +78,13 @@ def parse_recipe_detail(recipe_url):
     if not yemek_adi:
       return None
 
-    # 2. Malzemeler
+    # 2. Malzemeler (Satır atlamaları yerine virgül ile birleştirilir)
     mlz_div = soup.find("div", class_="mlz")
     malzemeler = ""
     if mlz_div:
-      malzemeler = mlz_div.get_text(separator="\n", strip=True)
+      raw_text = mlz_div.get_text(separator="\n", strip=True)
+      lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+      malzemeler = ", ".join(lines)
 
     if not malzemeler:
       return None
@@ -110,37 +115,54 @@ def parse_recipe_detail(recipe_url):
 
 def main():
   all_recipes = []
+  scraped_links = set()
   scraped_titles = set()
 
-  print("=== TEK SAYFA TARİF ÇEKME İŞLEMİ BAŞLATILDI ===")
+  # Eğer daha önceden oluşmuş bir rec.json varsa yükle (kaldığı yerden devam etme esnekliği sağlar)
+  if os.path.exists(OUTPUT_FILE):
+    try:
+      with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
+        all_recipes = json.load(f)
+        for item in all_recipes:
+          if "yemek adı" in item:
+            scraped_titles.add(item["yemek adı"])
+    except:
+      pass
+
+  print(f"=== İLK {TOTAL_PAGES} SAYFA İÇİN TARİF ÇEKME İŞLEMİ BAŞLATILDI ===")
   sys.stdout.flush()
 
-  # Sadece ilk sayfadaki linkleri al
-  links = get_recipe_links_from_single_page(TARGET_PAGE_URL)
-  print(f"-> İlk sayfada bulunan temiz tarif linki sayısı: {len(links)}")
-  sys.stdout.flush()
+  for page in range(1, TOTAL_PAGES + 1):
+    print(f"\n[Sayfa {page}/{TOTAL_PAGES}] taranıyor...")
+    sys.stdout.flush()
 
-  for link in links:
-    recipe_data = parse_recipe_detail(link)
+    links = get_recipe_links_from_page(page)
+    print(f"-> Bulunan temiz tarif linki sayısı: {len(links)}")
+    sys.stdout.flush()
 
-    if recipe_data:
-      yemek_adi = recipe_data["yemek adı"]
+    for link in links:
+      if link not in scraped_links:
+        scraped_links.add(link)
+        recipe_data = parse_recipe_detail(link)
 
-      if yemek_adi not in scraped_titles:
-        scraped_titles.add(yemek_adi)
-        all_recipes.append(recipe_data)
+        if recipe_data:
+          yemek_adi = recipe_data["yemek adı"]
 
-        print(f"   [BAŞARILI] {yemek_adi}")
-        sys.stdout.flush()
+          if yemek_adi not in scraped_titles:
+            scraped_titles.add(yemek_adi)
+            all_recipes.append(recipe_data)
 
-      time.sleep(0.05)
+            # Her başarılı tarifte rec.json dosyasına anında yaz
+            with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+              json.dump(all_recipes, f, ensure_ascii=False, indent=4)
 
-  # Elde edilen verileri rec.json dosyasına kaydet
-  with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-    json.dump(all_recipes, f, ensure_ascii=False, indent=4)
+            print(f"   [BAŞARILI ve KAYDEDİLDİ] {yemek_adi}")
+            sys.stdout.flush()
+
+          time.sleep(0.05)  # Sunucuyu yormamak için kısa bekleme
 
   print(
-      f"\n=== İŞLEM TAMAMLANDI! İlk sayfadaki {len(all_recipes)} tarif"
+      f"\n=== İŞLEM TAMAMLANDI! Toplam {len(all_recipes)} tarif"
       f" {OUTPUT_FILE} dosyasına kaydedildi. ==="
   )
   sys.stdout.flush()

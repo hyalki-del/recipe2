@@ -4,7 +4,7 @@ import pandas as pd
 
 # Scriptin bulunduğu klasörün yolunu baz alarak dosya yolunu otomatik bulma
 current_dir = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(current_dir, 'rec_kategorili-3.csv')
+file_path = os.path.join(current_dir, 'rec_kategorili.csv')
 
 # Verisetini yükle
 df = pd.read_csv(file_path)

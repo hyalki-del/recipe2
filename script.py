@@ -4,12 +4,14 @@ import pandas as pd
 
 # Scriptin bulunduğu klasörün yolunu baz alarak dosya yolunu otomatik bulma
 current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Dosya adınızı kendi projenize göre buraya yazın (Örn: 'rec_kategorili.csv')
 file_path = os.path.join(current_dir, 'rec_kategorili.csv')
 
 # Verisetini yükle
 df = pd.read_csv(file_path)
 
-# Yaygın birimlerin listesi
+# Yaygın birimlerin listesi (Birimlerin kalması istendiği için korunuyor)
 units_list = [
     'su bardağı',
     'çay bardağı',
@@ -37,7 +39,6 @@ units_list = [
     'şişe',
     'kahve fincanı',
 ]
-units_pattern = '|'.join(sorted(units_list, key=len, reverse=True))
 
 cleaned_ingredients = []
 
@@ -60,30 +61,22 @@ for idx, row in df.iterrows():
     if 'Malzemeleri' in part or ('için' in part and len(part) < 40):
       continue
 
-    # 1. Baş taraftaki sayıları ve ölçü birimlerini temizleme (Kullanıcı sayıları istemiyor)
-    # Örn: "700 gr. parça dana antrikot" -> "parça dana antrikot" veya sadece malzeme adı
-    # Sayıları ve birimleri regex ile temizleyelim:
-    # Önce baştaki sayıları ve birimleri ayıklayalım
+    # Sayıları, kesirli ifadeleri ve aralarındaki tire/boşlukları baştan temizleme (Birimler kalır)
     text_cleaned = re.sub(
-        r'^([\d\/\.\–\-\s]+)?\s*('
-        + units_pattern
-        + r')?\.?\s*',
-        '',
-        part,
-        flags=re.IGNORECASE,
+        r'^[\d\/\.\–\-\s,½¾¼⅓⅔]+', '', part, flags=re.IGNORECASE
     )
 
-    # Eğer geriye anlamlı bir şey kaldıysa ekle
     text_cleaned = text_cleaned.strip()
     if text_cleaned and len(text_cleaned) > 1:
       cleaned_ingredients.append(text_cleaned)
 
-# Sadece tek sütunlu (yalnızca malzemeler) yeni DataFrame oluşturma
+# Sadece birim ve malzeme adından oluşan yeni DataFrame
 result_df = pd.DataFrame({'malzeme': cleaned_ingredients})
 
 # Çıktı dosyasını kaydetme
 output_path = os.path.join(current_dir, 'temizlenmis_malzemeler.csv')
 result_df.to_csv(output_path, index=False, encoding='utf-8-sig')
 print(
-    f'Toplam {len(result_df)} adet saf malzeme başarıyla filtrelenip kaydedildi!'
+    f'Toplam {len(result_df)} adet malzeme (sayılardan arındırılmış) başarıyla'
+    ' kaydedildi!'
 )

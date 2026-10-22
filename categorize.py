@@ -10,43 +10,63 @@ lines = text.split('\n')
 clean_lines = [re.sub(r'<[^>]+>', '', line).strip() for line in lines]
 clean_lines = [l for l in clean_lines if l]
 
-current_category = None
+current_cat = None
 categories_dict = {}
-all_cat_recipes = {}
+all_cat_recipes_norm = {}
+
+def normalize_tr(text):
+    return text.lower().replace('İ', 'i').replace('I', 'ı').replace('Ş', 'ş').replace('Ğ', 'ğ').replace('Ü', 'ü').replace('Ö', 'ö').replace('Ç', 'ç')
 
 for line in clean_lines:
     if '--- Kategori' in line:
-        current_category = line.split('---')[1].strip().split(': ')[1] # kategori URL'si veya adı
-        categories_dict[current_category] = []
+        url = line.split('---')[1].strip().split(': ')[1]
+        current_cat = url.split('/')[-1].replace('-', ' ')
+        categories_dict[current_cat] = []
     elif '[BAŞARILI ve KAYDEDİLDİ]' in line:
         recipe_name = line.replace('[BAŞARILI ve KAYDEDİLDİ]', '').strip()
-        if current_category:
-            categories_dict[current_category].append(recipe_name)
-            all_cat_recipes[recipe_name.lower().strip()] = current_category
+        if current_cat:
+            categories_dict[current_cat].append(recipe_name)
+            all_cat_recipes_norm[normalize_tr(recipe_name)] = current_cat
 
 # 2. rec.csv dosyasını oku
 rec_df = pd.read_csv('rec.csv')
 
-# 3. Doğru kategori sütununu ekle
+# 3. Kategori eşleştirmesi yap ve en başa sütun olarak ekle
 matched_categories = []
 for idx, row in rec_df.iterrows():
-    name = str(row['yemek adı']).strip().lower()
+    name = str(row['yemek adı']).strip()
+    norm_name = normalize_tr(name)
+    
     cat = None
-    if name in all_cat_recipes:
-        cat = all_cat_recipes[name]
-    elif name + " tarifi" in all_cat_recipes:
-        cat = all_cat_recipes[name + " tarifi"]
-    elif name.replace(" tarifi", "") in all_cat_recipes:
-        cat = all_cat_recipes[name.replace(" tarifi", "")]
+    if norm_name in all_cat_recipes_norm:
+        cat = all_cat_recipes_norm[norm_name]
+    elif norm_name + " tarifi" in all_cat_recipes_norm:
+        cat = all_cat_recipes_norm[norm_name + " tarifi"]
+    elif norm_name.replace(" tarifi", "") in all_cat_recipes_norm:
+        cat = all_cat_recipes_norm[norm_name.replace(" tarifi", "")]
     else:
-        # En yakın eşleşme
-        matches = difflib.get_close_matches(name, list(all_cat_recipes.keys()), n=1, cutoff=0.7)
-        if matches:
-            cat = all_cat_recipes[matches[0]]
+        # Özel eşleştirmeler
+        if 'keçi ayağı' in norm_name or 'fıstıklı çıtır muhallebi' in norm_name:
+            cat = 'tatlilar'
+        elif 'pide tiridi' in norm_name or 'bonfileli humus' in norm_name or 'tas kebabı' in norm_name:
+            cat = 'et yemekleri'
+        elif 'kuru fasulye' in norm_name:
+            cat = 'sebze yemekleri'
+        elif 'güllaç' in norm_name:
+            cat = 'tatlilar'
         else:
-            cat = "Diğer / Kategorisiz"
+            matches = difflib.get_close_matches(norm_name, list(all_cat_recipes_norm.keys()), n=1, cutoff=0.7)
+            if matches:
+                cat = all_cat_recipes_norm[matches[0]]
+            else:
+                cat = 'diğer'
     matched_categories.append(cat)
 
-rec_df['kategori'] = matched_categories
+# Kategori sütununu 0. indekse ekle
+if 'kategori' in rec_df.columns:
+    rec_df.drop(columns=['kategori'], inplace=True)
+rec_df.insert(0, 'kategori', matched_categories)
+
+# Yeni dosyaya kaydet
 rec_df.to_csv('rec_kategorili.csv', index=False)
-print("Eşleştirme tamamlandı ve rec_kategorili.csv olarak kaydedildi!")
+print("İşlem başarıyla tamamlandı! Kategori sütunu en baştadır.")

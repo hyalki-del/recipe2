@@ -1,55 +1,52 @@
 import pandas as pd
-from tqdm import tqdm
+import re
+import difflib
 
-def yemek_kategorize_et(yemek_adi, malzemeler, aciklama):
-    metin = f"{str(yemek_adi)} {str(malzemeler)} {str(aciklama)}".lower()
-    
-    # Anahtar kelime tabanlı akıllı kural seti
-    if any(k in metin for k in ['çorba', 'mercimek', 'tarhana', 'ezogelin', 'şehriye']):
-        return 'Çorbalar'
-    elif any(k in metin for k in ['kek', 'kurabiye', 'pasta', 'börek', 'poğaça', 'baklava', 'tatlı', 'şerbet', 'muhallebi', 'sütlaç', 'kadayıf', 'şeker', 'çikolata', 'dondurma']):
-        return 'Tatlılar ve Hamur İşleri'
-    elif any(k in metin for k in ['et', 'kıyma', 'antrikot', 'biftek', 'köfte', 'pirzola', 'kavurma', 'kebap', 'ciğer']):
-        return 'Et Yemekleri'
-    elif any(k in metin for k in ['tavuk', 'piliç', 'göğsü', 'but']):
-        return 'Tavuk Yemekleri'
-    elif any(k in metin for k in ['balık', 'karides', 'levrek', 'çipura', 'somon', 'hamsi', 'kalamar']):
-        return 'Deniz Ürünleri'
-    elif any(k in metin for k in ['makarna', 'erişte', 'spaghetti', 'penne']):
-        return 'Makarnalar'
-    elif any(k in metin for k in ['pilav', 'pirinç', 'bulgur']):
-        return 'Pilavlar'
-    elif any(k in metin for k in ['salata', 'marul', 'roka', 'maydanoz', 'yeşillik', 'sos', 'meze']):
-        return 'Salatalar ve Mezeler'
-    elif any(k in metin for k in ['sebze', 'patlıcan', 'kabak', 'ıspanak', 'pırasa', 'bamya', 'fasulye', 'nohut', 'mercimek']):
-        return 'Sebze ve Bakliyat Yemekleri'
+# 1. kategori.html dosyasını oku ve kategorileri parse et
+with open('kategori.html', 'r', encoding='utf-8') as f:
+    text = f.read()
+
+lines = text.split('\n')
+clean_lines = [re.sub(r'<[^>]+>', '', line).strip() for line in lines]
+clean_lines = [l for l in clean_lines if l]
+
+current_category = None
+categories_dict = {}
+all_cat_recipes = {}
+
+for line in clean_lines:
+    if '--- Kategori' in line:
+        current_category = line.split('---')[1].strip().split(': ')[1] # kategori URL'si veya adı
+        categories_dict[current_category] = []
+    elif '[BAŞARILI ve KAYDEDİLDİ]' in line:
+        recipe_name = line.replace('[BAŞARILI ve KAYDEDİLDİ]', '').strip()
+        if current_category:
+            categories_dict[current_category].append(recipe_name)
+            all_cat_recipes[recipe_name.lower().strip()] = current_category
+
+# 2. rec.csv dosyasını oku
+rec_df = pd.read_csv('rec.csv')
+
+# 3. Doğru kategori sütununu ekle
+matched_categories = []
+for idx, row in rec_df.iterrows():
+    name = str(row['yemek adı']).strip().lower()
+    cat = None
+    if name in all_cat_recipes:
+        cat = all_cat_recipes[name]
+    elif name + " tarifi" in all_cat_recipes:
+        cat = all_cat_recipes[name + " tarifi"]
+    elif name.replace(" tarifi", "") in all_cat_recipes:
+        cat = all_cat_recipes[name.replace(" tarifi", "")]
     else:
-        return 'Diğer'
+        # En yakın eşleşme
+        matches = difflib.get_close_matches(name, list(all_cat_recipes.keys()), n=1, cutoff=0.7)
+        if matches:
+            cat = all_cat_recipes[matches[0]]
+        else:
+            cat = "Diğer / Kategorisiz"
+    matched_categories.append(cat)
 
-def main():
-    dosya_adi = "rec.csv"
-    cikis_dosyasi = "rec_kategorili.csv"
-    
-    print(f"'{dosya_adi}' okunuyor...")
-    df = pd.read_csv(dosya_adi)
-    
-    kategoriler = []
-    print("Yemekler kategorize ediliyor...")
-    
-    for index, row in tqdm(df.iterrows(), total=len(df)):
-        kat = yemek_kategorize_et(
-            row.get('yemek adı', ''), 
-            row.get('malzemeler', ''), 
-            row.get('açıklama', '')
-        )
-        kategoriler.append(kat)
-    
-    # Yeni 'kategori' kolonunu en başa ekle
-    df.insert(0, 'kategori', kategoriler)
-    
-    # Yeni dosyaya kaydet
-    df.to_csv(cikis_dosyasi, index=False, encoding='utf-8-sig')
-    print(f"İşlem tamamlandı! Sonuçlar '{cikis_dosyasi}' dosyasına kaydedildi.")
-
-if __name__ == "__main__":
-    main()
+rec_df['kategori'] = matched_categories
+rec_df.to_csv('rec_kategorili.csv', index=False)
+print("Eşleştirme tamamlandı ve rec_kategorili.csv olarak kaydedildi!")

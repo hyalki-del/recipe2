@@ -6,7 +6,10 @@ import time
 from bs4 import BeautifulSoup
 import requests
 
-URL = "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/"
+BASE_CATEGORY_URL = (
+    "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/page/{}/"
+)
+TOTAL_PAGES = 142
 OUTPUT_FILE = "rec.json"
 
 HEADERS = {
@@ -18,49 +21,142 @@ HEADERS = {
 }
 
 
-def test_connection():
-  print(f"Bağlantı test ediliyor: {URL}")
-  sys.stdout.flush()
+def clean_url(url):
+  """Linklerin sonundaki #comments, #respond veya / gibi ekleri temizler."""
+  if "#" in url:
+    url = url.split("#")[0]
+  url = url.strip()
+  if url.endswith("/"):
+    url = url[:-1]
+  return url
+
+
+def get_recipe_links_from_page(page_number):
+  if page_number == 1:
+    url = "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/"
+  else:
+    url = BASE_CATEGORY_URL.format(page_number)
 
   try:
-    response = requests.get(URL, headers=HEADERS, timeout=15)
-    print(f"HTTP Status Kodu: {response.status_code}")
-    sys.stdout.flush()
-
+    response = requests.get(url, headers=HEADERS, timeout=10)
     if response.status_code != 200:
-      print(
-          "UYARI: Site isteği engelledi veya sayfa bulunamadı!"
-          f" Yanıt:\n{response.text[:500]}"
-      )
-      sys.stdout.flush()
-      return False
+      return []
 
     soup = BeautifulSoup(response.text, "html.parser")
     links = set()
 
     for a in soup.find_all("a", href=True):
       href = a["href"].strip()
-      if href.endswith("/"):
-        href = href[:-1]
+      cleaned = clean_url(href)
+
       if (
-          "ardaninmutfagi.com/yemek-tarifleri/" in href
-          and "/category/" not in href
-          and "/page/" not in href
+          "ardaninmutfagi.com/yemek-tarifleri/" in cleaned
+          and "/category/" not in cleaned
+          and "/page/" not in cleaned
       ):
-        links.add(href)
+        links.add(cleaned)
 
-    print(f"Başarılı! İlk sayfada bulunan tarif linki sayısı: {len(links)}")
-    sys.stdout.flush()
-    for l in list(links)[:5]:
-      print(f" - Örnek link: {l}")
-    sys.stdout.flush()
-    return True
-
+    return list(links)
   except Exception as e:
-    print(f"Bağlantı sırasında kritik hata: {e}")
+    return []
+
+
+def parse_recipe_detail(recipe_url):
+  try:
+    response = requests.get(recipe_url, headers=HEADERS, timeout=10)
+    if response.status_code != 200:
+      return None
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    # 1. Yemek Adı (<meta property="og:title" content="...">)
+    og_title = soup.find("meta", property="og:title")
+    yemek_adi = None
+    if og_title and og_title.get("content"):
+      yemek_adi = og_title["content"].strip()
+
+    if not yemek_adi:
+      return None
+
+    # 2. Malzemeler (<div class="mlz"> ... </div>)
+    mlz_div = soup.find("div", class_="mlz")
+    malzemeler = ""
+    aciklama = ""
+
+    if mlz_div:
+      malzemeler = mlz_div.get_text(separator="\n", strip=True)
+
+      # 3. Hemen arkasından gelen <p> </p> arasındaki data "açıklama"
+      next_p = mlz_div.find_next("p")
+      if next_p:
+        aciklama = next_p.get_text(strip=True)
+
+    if not malzemeler:
+      return None
+
+    return {
+        "yemek adı": yemek_adi,
+        "malzemeler": malzemeler,
+        "açıklama": aciklama,
+    }
+  except Exception as e:
+    return None
+
+
+def main():
+  all_recipes = []
+  scraped_links = set()
+  scraped_titles = set()
+
+  # Eğer daha önceden oluşmuş bir rec.json varsa yükle (kaldığı yerden devam etme esnekliği sağlar)
+  if os.path.exists(OUTPUT_FILE):
+    try:
+      with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
+        all_recipes = json.load(f)
+        for item in all_recipes:
+          if "yemek adı" in item:
+            scraped_titles.add(item["yemek adı"])
+    except:
+      pass
+
+  print("=== TÜM RAMAZAN TARİFLERİ ÇEKME İŞLEMİ BAŞLATILDI ===")
+  sys.stdout.flush()
+
+  for page in range(1, TOTAL_PAGES + 1):
+    print(f"\n[Sayfa {page}/{TOTAL_PAGES}] taranıyor...")
     sys.stdout.flush()
-    return False
+
+    links = get_recipe_links_from_page(page)
+    print(f"-> Bulunan temiz tarif linki sayısı: {len(links)}")
+    sys.stdout.flush()
+
+    for link in links:
+      if link not in scraped_links:
+        scraped_links.add(link)
+        recipe_data = parse_recipe_detail(link)
+
+        if recipe_data:
+          yemek_adi = recipe_data["yemek adı"]
+
+          if yemek_adi not in scraped_titles:
+            scraped_titles.add(yemek_adi)
+            all_recipes.append(recipe_data)
+
+            # Her başarılı tarifte rec.json dosyasına anında yaz
+            with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+              json.dump(all_recipes, f, ensure_ascii=False, indent=4)
+
+            print(f"   [BAŞARILI ve KAYDEDİLDİ] {yemek_adi}")
+            sys.stdout.flush()
+
+        time.sleep(0.05)  # Sunucuyu boğmamak için mini bekleme
+
+  print(
+      f"\n=== İŞLEM TAMAMLANDI! Toplam {len(all_recipes)} benzersiz tarif"
+      f" {OUTPUT_FILE} dosyasına kaydedildi. ==="
+  )
+  sys.stdout.flush()
 
 
 if __name__ == "__main__":
-  test_connection()
+  main()

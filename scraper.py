@@ -34,19 +34,20 @@ def get_recipe_links_from_page(page_number):
       return []
 
     soup = BeautifulSoup(response.text, "html.parser")
-    links = set()  # Tekrarı önlemek için set kullanıyoruz
+    links = set()
 
-    # Sadece içerik alanındaki tarif bağlantılarını hedefleyelim
-    # Sitedeki genel yapı genellikle article veya post class'ları içerisindedir
     for a in soup.find_all("a", href=True):
-      href = a["href"]
-      # Kategori sayfaları, ana sayfa ve arşiv linklerini ayıklıyoruz
+      href = a["href"].strip()
+      # URL sonundaki olası boşluk veya slash farklarını normalize etmek için temizleyelim
+      if href.endswith("/"):
+        href = href[:-1]
+
       if (
           "ardaninmutfagi.com/" in href
           and "/category/" not in href
           and "/page/" not in href
-          and href != "https://www.ardaninmutfagi.com/"
           and href != "https://www.ardaninmutfagi.com"
+          and href != "https://www.ardaninmutfagi.com/"
       ):
         links.add(href)
 
@@ -55,6 +56,7 @@ def get_recipe_links_from_page(page_number):
     print(f"-> Sayfa çekilirken hata oluştu {url}: {e}")
     sys.stdout.flush()
     return []
+
 
 def parse_recipe_detail(recipe_url):
   try:
@@ -100,6 +102,7 @@ def parse_recipe_detail(recipe_url):
 def main():
   all_recipes = []
   scraped_links = set()
+  scraped_titles = set()  # Aynı yemeğin tekrar eklenmesini önler
 
   print("=== VERİ ÇEKME İŞLEMİ BAŞLATILDI ===")
   sys.stdout.flush()
@@ -109,26 +112,33 @@ def main():
     sys.stdout.flush()
 
     links = get_recipe_links_from_page(page)
-    print(f"-> Bu sayfada {len(links)} link bulundu.")
+    print(f"-> Bu sayfada {len(links)} unique link bulundu.")
     sys.stdout.flush()
 
     for link in links:
-      if link not in scraped_links:
-        scraped_links.add(link)
+      # URL normalizasyonu
+      norm_link = link[:-1] if link.endswith("/") else link
+
+      if norm_link not in scraped_links:
+        scraped_links.add(norm_link)
         recipe_data = parse_recipe_detail(link)
         if recipe_data:
-          all_recipes.append(recipe_data)
-          # Hangi yemeği çektiğini ekrana yazdırıyoruz (anlık takip için)
-          print(f"   [BAŞARILI] {recipe_data['yemek adı']}")
-          sys.stdout.flush()
-        time.sleep(0.2)
+          yemek_adi = recipe_data["yemek adı"]
+
+          # Eğer bu yemek ismi daha önce eklenmediyse listeye al
+          if yemek_adi not in scraped_titles:
+            scraped_titles.add(yemek_adi)
+            all_recipes.append(recipe_data)
+            print(f"   [BAŞARILI] {yemek_adi}")
+            sys.stdout.flush()
+        time.sleep(0.1)
 
   # rec.json dosyasına kaydet
   try:
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
       json.dump(all_recipes, f, ensure_ascii=False, indent=4)
     print(
-        f"\n=== İŞLEM TAMAMLANDI! Toplam {len(all_recipes)} tarif"
+        f"\n=== İŞLEM TAMAMLANDI! Toplam {len(all_recipes)} benzersiz tarif"
         f" {OUTPUT_FILE} dosyasına yazıldı. ==="
     )
     sys.stdout.flush()

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bugün Ne Pişirsem? - Akıllı Yemek Seçici</title>
+    <!-- Google Fonts & Tailwind CSS -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        body { font-family: 'Poppins', sans-serif; background-color: #f8fafc; }
+        .slot-text {
+            display: inline-block;
+            transition: transform 0.05s ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start p-6">
+
+    <header class="text-center mb-10 mt-4">
+        <h1 class="text-4xl font-extrabold text-slate-800 mb-2">🍳 Ne Pişirsem?</h1>
+        <p class="text-slate-600">Bir kategori seçin, sizin için lezzetli bir yemek seçelim!</p>
+    </header>
+
+    <!-- Kategori Butonları ve Karıştırıcı Alanı -->
+    <div id="categories-container" class="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Dinamik olarak yüklenecek -->
+    </div>
+
+    <!-- Tarif Detay Modalı (Ayrı Pencere / Popup) -->
+    <div id="recipe-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+        <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="bg-orange-500 text-white px-6 py-4 flex justify-between items-center">
+                <h2 id="modal-title" class="text-2xl font-bold">Yemek Adı</h2>
+                <button onclick="closeModal()" class="text-white hover:text-slate-200 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-6 flex-1">
+                <div>
+                    <h3 class="text-lg font-semibold text-orange-600 mb-2">🛒 Malzemeler</h3>
+                    <div id="modal-ingredients" class="text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-100"></div>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-orange-600 mb-2">👨‍🍳 Hazırlanışı & Tarif</h3>
+                    <div id="modal-instructions" class="text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-100"></div>
+                </div>
+            </div>
+            <div class="bg-slate-50 px-6 py-3 border-t border-slate-100 flex justify-end">
+                <button onclick="closeModal()" class="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2 rounded-xl font-medium transition">Kapat</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let recipeData = [];
+        let categoryMap = {};
+        let activeIntervals = {};
+        let selectedRecipes = {};
+
+        // CSV Dosyasını Yükle ve Ayrıştır
+        Papa.parse("rec_kategorili.csv", {
+            download: true,
+            header: true,
+            complete: function(results) {
+                recipeData = results.data;
+                processCategories();
+            }
+        });
+
+        function processCategories() {
+            categoryMap = {};
+            recipeData.forEach(row => {
+                let cat = row.kategori ? row.kategori.trim() : "diğer";
+                if (!categoryMap[cat]) categoryMap[cat] = [];
+                if (row['yemek adı']) {
+                    categoryMap[cat].push({
+                        name: row['yemek adı'],
+                        ingredients: row['malzemeler'],
+                        description: row['açıklama']
+                    });
+                }
+            });
+
+            renderUI();
+        }
+
+        function renderUI() {
+            const container = document.getElementById('categories-container');
+            container.innerHTML = '';
+
+            Object.keys(categoryMap).forEach(cat => {
+                if (categoryMap[cat].length === 0) return;
+
+                // Kategori adını düzgün başlık yapma (örn: et yemekleri -> Et Yemekleri)
+                let titleFormatted = cat.charAt(0).toUpperCase() + cat.slice(1);
+
+                let card = document.createElement('div');
+                card.className = "bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 hover:shadow-md transition";
+
+                card.innerHTML = `
+                    <button onclick="toggleCategory('${cat}')" id="btn-${cat}" class="w-full sm:w-44 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-4 rounded-xl shadow transition transform active:scale-95 text-center capitalize">
+                        ${titleFormatted}
+                    </button>
+                    <div class="flex-1 text-center sm:text-left overflow-hidden">
+                        <span id="slot-${cat}" onclick="openRecipeDetail('${cat}')" class="text-lg font-medium text-slate-700 cursor-pointer hover:text-orange-600 transition truncate block">
+                            Butona basarak karıştırın...
+                        </span>
+                    </div>
+                `;
+                container.appendChild(card);
+
+                // Başlangıçta tüm kategoriler otomatik hızlıca karışmaya başlasın
+                startSlot(cat);
+            });
+        }
+
+        function startSlot(cat) {
+            let recipes = categoryMap[cat];
+            let slotElement = document.getElementById(`slot-${cat}`);
+            
+            if (activeIntervals[cat]) clearInterval(activeIntervals[cat]);
+
+            activeIntervals[cat] = setInterval(() => {
+                let randomRecipe = recipes[Math.floor(Math.random() * recipes.length)];
+                selectedRecipes[cat] = randomRecipe;
+                slotElement.textContent = randomRecipe.name;
+            }, 80); // Karıştırma hızı (milisaniye)
+        }
+
+        function toggleCategory(cat) {
+            let btn = document.getElementById(`btn-${cat}`);
+            let slotElement = document.getElementById(`slot-${cat}`);
+
+            if (activeIntervals[cat]) {
+                // DURDUR
+                clearInterval(activeIntervals[cat]);
+                activeIntervals[cat] = null;
+                btn.textContent = "Tekrar Karıştır";
+                btn.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+                btn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+                slotElement.classList.add('font-bold', 'text-emerald-700', 'underline');
+            } else {
+                // YENİDEN BAŞLAT
+                btn.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+                btn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
+                btn.classList.add('bg-orange-500', 'hover:bg-orange-600');
+                slotElement.classList.remove('font-bold', 'text-emerald-700', 'underline');
+                startSlot(cat);
+            }
+        }
+
+        function openRecipeDetail(cat) {
+            // Eğer kategori durdurulduysa o an ekranda yazan yemeği aç
+            let recipe = selectedRecipes[cat];
+            if (!recipe) return;
+
+            document.getElementById('modal-title').textContent = recipe.name;
+            document.getElementById('modal-ingredients').textContent = recipe.ingredients || "Malzeme bilgisi bulunamadı.";
+            document.getElementById('modal-instructions').textContent = recipe.description || "Tarif açıklaması bulunamadı.";
+            
+            document.getElementById('recipe-modal').classList.remove('hidden');
+            document.getElementById('recipe-modal').classList.add('flex');
+        }
+
+        function closeModal() {
+            document.getElementById('recipe-modal').classList.remove('flex');
+            document.getElementById('recipe-modal').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>

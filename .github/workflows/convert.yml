@@ -5,7 +5,6 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-# GitHub Actions botunun repoya yazma izni (403 hatasını önlemek için şarttır)
 permissions:
   contents: write
 
@@ -27,12 +26,12 @@ jobs:
 
       - name: Python Scriptini Calistir
         run: |
-          python malzeme_listesi_olustur.py
+          python extract_materials.py
 
       - name: Degisiklikleri Kaydet ve GitHub'a Gonder
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add sadece_benzersiz_malzemeler.csv
-          git commit -m "Otomatik guncellendi: Benzersiz malzeme listesi" || echo "Degisiklik yok"
+          git add .
+          git commit -m "Otomatik guncellendi: extract_materials.py calistirildi" || echo "Degisiklik yok"
           git push

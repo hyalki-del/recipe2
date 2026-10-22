@@ -1,0 +1,35 @@
+name: Yemekleri Kategorize Et
+
+on:
+  workflow_dispatch: # Manuel tetikleme
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodları Klonla
+        uses: actions/checkout@v4
+
+      - name: Python Kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Bağımlılıkları Yükle
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Betiği Çalıştır
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python categorize.py
+
+      - name: Değişiklikleri Kaydet (Commit & Push)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add rec_kategorili.csv
+          git commit -m "Yemekler otomatik olarak kategorize edildi"
+          git push

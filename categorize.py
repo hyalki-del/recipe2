@@ -1,8 +1,7 @@
 import pandas as pd
 import re
 import difflib
-import os
-import subprocess
+from datetime import datetime
 
 # 1. kategori.html dosyasını oku ve kategorileri temiz bir şekilde parse et
 with open('kategori.html', 'r', encoding='utf-8') as f:
@@ -66,22 +65,10 @@ if 'kategori' in rec_df.columns:
     rec_df.drop(columns=['kategori'], inplace=True)
 rec_df.insert(0, 'kategori', matched_categories)
 
-# 5. rec_kategorili.csv olarak kaydet
+# 5. Git'in her seferinde değişiklik algılaması için dinamik zaman damgası ekle
+rec_df['son_guncelleme'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+# 6. Dosyayı kaydet
 output_filename = 'rec_kategorili.csv'
 rec_df.to_csv(output_filename, index=False)
-print("CSV dosyası başarıyla güncellendi.")
-
-# 6. Git işlemlerini Python üzerinden güvenli yönet (Hata almamak için kontrol ekledik)
-try:
-    status_result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True, check=True)
-    if output_filename in status_result.stdout:
-        subprocess.run(['git', 'config', '--global', 'user.name', 'github-actions[bot]'], check=True)
-        subprocess.run(['git', 'config', '--global', 'user.email', 'github-actions[bot]@users.noreply.github.com'], check=True)
-        subprocess.run(['git', 'add', output_filename], check=True)
-        subprocess.run(['git', 'commit', '-m', 'Yemekler otomatik olarak kategorize edildi'], check=True)
-        subprocess.run(['git', 'push'], check=True)
-        print("Değişiklikler GitHub'a başarıyla gönderildi.")
-    else:
-        print("Dosyada herhangi bir değişiklik yok, commit atılmadı.")
-except Exception as e:
-    print(f"Git işlemi sırasında uyarı/hata (akışı durdurmaz): {e}")
+print("İşlem tamamlandı! Kategori sütunu en başta ve her çalışmada fark oluşması için zaman damgası eklendi.")

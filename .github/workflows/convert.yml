@@ -4,4 +4,40 @@ on:
   push:
     paths:
       - 'rec.json'
-  workflow_dispatch: # Bu satırın ekli olduğundan emin olun!
+  workflow_dispatch:
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Convert JSON to CSV
+        run: |
+          python3 -c '
+          import json, csv
+          with open("rec.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+          if isinstance(data, dict): data = [data]
+          if data:
+              with open("rec.csv", "w", newline="", encoding="utf-8") as f:
+                  writer = csv.DictWriter(f, fieldnames=data[0].keys())
+                  writer.writeheader()
+                  writer.writerows(data)
+          '
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add rec.csv
+          git commit -m "Auto-convert rec.json to rec.csv" || exit 0
+          git push

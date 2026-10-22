@@ -2,7 +2,7 @@ import pandas as pd
 import re
 
 # 1. Verisetini yükleyin
-df = pd.read_csv('rec_kategorili-3.csv')
+df = pd.read_csv('rec_kategorili.csv')
 
 # 2. Yaygın birimlerin listesi
 units_list = [

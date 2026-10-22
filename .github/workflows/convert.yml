@@ -1,4 +1,4 @@
-name: Convert JSON and Extract Ingredients
+name: Extract Materials and Units
 
 on:
   push:
@@ -7,10 +7,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  process-data:
+  process:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # Botun repository'ye dosya yazabilmesi için ŞARTTIR
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -20,8 +20,9 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Run JSON to CSV and Ingredient Extractor
+      - name: Run Extraction Script
         run: |
+          # Önce rec.json'u rec.csv'ye çeviren Python kodunuz
           python3 -c '
           import json, csv
           with open("rec.json", "r", encoding="utf-8") as f:
@@ -33,12 +34,14 @@ jobs:
                   writer.writeheader()
                   writer.writerows(data)
           '
-          python3 parse_ingredients.py
+          
+          # Şimdi malzeme ve birimleri özetleyen Python kodunu çalıştıralım
+          python3 extract_materials.py
 
-      - name: Commit and push changes
+      - name: Commit and push generated CSV
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add rec.csv sadece_malzemeler.csv
-          git commit -m "Auto-update rec.csv and sadece_malzemeler.csv" || exit 0
+          git add malzeme_birim_ozet.csv rec.csv
+          git commit -m "Auto-generate malzeme_birim_ozet.csv via GitHub Actions" || exit 0
           git push

@@ -9,7 +9,7 @@ import requests
 BASE_CATEGORY_URL = (
     "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/page/{}/"
 )
-TOTAL_PAGES = 10  # İlk 10 sayfa olarak sınırlandırıldı
+TOTAL_PAGES = 10  # İlk 10 sayfa
 OUTPUT_FILE = "rec.json"
 
 HEADERS = {
@@ -78,18 +78,34 @@ def parse_recipe_detail(recipe_url):
     if not yemek_adi:
       return None
 
-    # 2. Malzemeler (Satır atlamaları yerine virgül ile birleştirilir)
+    # 2. Malzemeler (Başlıklar temizlenir ve virgüllü formata dönüştürülür)
     mlz_div = soup.find("div", class_="mlz")
     malzemeler = ""
     if mlz_div:
       raw_text = mlz_div.get_text(separator="\n", strip=True)
       lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-      malzemeler = ", ".join(lines)
+
+      cleaned_items = []
+      for line in lines:
+        # "Malzemeleri" içeren başlık satırlarını veya yemek adını ele
+        if "malzemeleri" in line.lower() or "için malzemeler" in line.lower():
+          continue
+        if yemek_adi and yemek_adi.lower() in line.lower():
+          continue
+
+        # Satır içindeki virgülleri de parçalayarak tekil malzeme öğelerine ayır
+        parts = [p.strip() for p in line.split(",") if p.strip()]
+        for part in parts:
+          if "malzemeler" in part.lower() or "malzemeleri" in part.lower():
+            continue
+          cleaned_items.append(part)
+
+      malzemeler = ", ".join(cleaned_items)
 
     if not malzemeler:
       return None
 
-    # 3. Açıklama (Div'lerde kesilme sorunu düzeltildi, sadece <p> etiketleri alınıyor)
+    # 3. Açıklama (Sadece <p> etiketleri alınıyor)
     aciklama = ""
     entry_content = soup.find(class_="entry-content")
 
@@ -118,7 +134,6 @@ def main():
   scraped_links = set()
   scraped_titles = set()
 
-  # Eğer daha önceden oluşmuş bir rec.json varsa yükle (kaldığı yerden devam etme esnekliği sağlar)
   if os.path.exists(OUTPUT_FILE):
     try:
       with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
@@ -152,14 +167,13 @@ def main():
             scraped_titles.add(yemek_adi)
             all_recipes.append(recipe_data)
 
-            # Her başarılı tarifte rec.json dosyasına anında yaz
             with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
               json.dump(all_recipes, f, ensure_ascii=False, indent=4)
 
             print(f"   [BAŞARILI ve KAYDEDİLDİ] {yemek_adi}")
             sys.stdout.flush()
 
-          time.sleep(0.05)  # Sunucuyu yormamak için kısa bekleme
+          time.sleep(0.05)
 
   print(
       f"\n=== İŞLEM TAMAMLANDI! Toplam {len(all_recipes)} tarif"

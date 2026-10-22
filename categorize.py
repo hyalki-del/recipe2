@@ -1,32 +1,30 @@
-import os
 import pandas as pd
-from openai import OpenAI
 from tqdm import tqdm
 
-# OpenAI istemcisini başlat (Çevre değişkeninden API anahtarını alır)
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-
 def yemek_kategorize_et(yemek_adi, malzemeler, aciklama):
-    prompt = f"""
-Aşağıda verilen yemek tarifini en uygun ana kategoriye (Örn: Çorbalar, Et Yemekleri, Tavuk Yemekleri, Sebze Yemekleri, Tatlılar, Hamur İşleri, Salatalar, Makarnalar ve Pilavlar vb.) dahil et. Sadece kategorinin adını tek kelime veya kısa bir grup olarak (maksimum 2-3 kelime) yaz, başka hiçbir açıklama yapma.
-
-Yemek Adı: {yemek_adi}
-Malzemeler: {malzemeler}
-Açıklama: {aciklama}
-
-Kategori:
-"""
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Hızlı ve ekonomik model
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=20
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"Hata oluştu: {e}")
-        return "Diğer"
+    metin = f"{str(yemek_adi)} {str(malzemeler)} {str(aciklama)}".lower()
+    
+    # Anahtar kelime tabanlı akıllı kural seti
+    if any(k in metin for k in ['çorba', 'mercimek', 'tarhana', 'ezogelin', 'şehriye']):
+        return 'Çorbalar'
+    elif any(k in metin for k in ['kek', 'kurabiye', 'pasta', 'börek', 'poğaça', 'baklava', 'tatlı', 'şerbet', 'muhallebi', 'sütlaç', 'kadayıf', 'şeker', 'çikolata', 'dondurma']):
+        return 'Tatlılar ve Hamur İşleri'
+    elif any(k in metin for k in ['et', 'kıyma', 'antrikot', 'biftek', 'köfte', 'pirzola', 'kavurma', 'kebap', 'ciğer']):
+        return 'Et Yemekleri'
+    elif any(k in metin for k in ['tavuk', 'piliç', 'göğsü', 'but']):
+        return 'Tavuk Yemekleri'
+    elif any(k in metin for k in ['balık', 'karides', 'levrek', 'çipura', 'somon', 'hamsi', 'kalamar']):
+        return 'Deniz Ürünleri'
+    elif any(k in metin for k in ['makarna', 'erişte', 'spaghetti', 'penne']):
+        return 'Makarnalar'
+    elif any(k in metin for k in ['pilav', 'pirinç', 'bulgur']):
+        return 'Pilavlar'
+    elif any(k in metin for k in ['salata', 'marul', 'roka', 'maydanoz', 'yeşillik', 'sos', 'meze']):
+        return 'Salatalar ve Mezeler'
+    elif any(k in metin for k in ['sebze', 'patlıcan', 'kabak', 'ıspanak', 'pırasa', 'bamya', 'fasulye', 'nohut', 'mercimek']):
+        return 'Sebze ve Bakliyat Yemekleri'
+    else:
+        return 'Diğer'
 
 def main():
     dosya_adi = "rec.csv"
@@ -38,12 +36,11 @@ def main():
     kategoriler = []
     print("Yemekler kategorize ediliyor...")
     
-    # tqdm ile ilerleme çubuğu göstererek satırları işleyelim
     for index, row in tqdm(df.iterrows(), total=len(df)):
         kat = yemek_kategorize_et(
-            str(row.get('yemek adı', '')), 
-            str(row.get('malzemeler', '')), 
-            str(row.get('açıklama', ''))
+            row.get('yemek adı', ''), 
+            row.get('malzemeler', ''), 
+            row.get('açıklama', '')
         )
         kategoriler.append(kat)
     

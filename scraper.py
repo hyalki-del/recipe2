@@ -6,10 +6,7 @@ import time
 from bs4 import BeautifulSoup
 import requests
 
-BASE_CATEGORY_URL = (
-    "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/page/{}/"
-)
-TOTAL_PAGES = 10  # İlk 10 sayfa (İstediğiniz gibi ayarlayabilirsiniz)
+MAIN_URL = "https://www.ardaninmutfagi.com/category/yemek-tarifleri"
 OUTPUT_FILE = "rec.json"
 
 HEADERS = {
@@ -17,7 +14,7 @@ HEADERS = {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
         " like Gecko) Chrome/122.0.0.0 Safari/537.36"
     ),
-    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en-US;q=0.7",
+    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
 
@@ -31,16 +28,45 @@ def clean_url(url):
   return url
 
 
-def get_recipe_links_from_page(page_number):
+def get_main_categories():
+  """Ana sayfadaki <ul class="dropdown-menu ck-liste"> altından 15 kategori linkini çeker."""
+  try:
+    print(f"Ana kategori listesi alınıyor: {MAIN_URL}")
+    response = requests.get(MAIN_URL, headers=HEADERS, timeout=10)
+    if response.status_code != 200:
+      print(f"Ana sayfa yüklenemedi. HTTP Kod: {response.status_code}")
+      return []
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    ul_element = soup.find("ul", class_="dropdown-menu ck-liste")
+
+    categories = set()
+    if ul_element:
+      for a in ul_element.find_all("a", href=True):
+        href = a["href"].strip()
+        cleaned = clean_url(href)
+        if cleaned and cleaned not in categories:
+          categories.add(cleaned)
+
+    print(f"-> Toplam {len(categories)} adet ana kategori bulundu.")
+    return list(categories)
+  except Exception as e:
+    print(f"Kategori çekme hatası: {e}")
+    return []
+
+
+def get_recipe_links_from_category_page(category_url, page_number):
+  """Belirli bir kategorinin n. sayfasındaki tarif linklerini toplar."""
   if page_number == 1:
-    url = "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/"
+    url = category_url
   else:
-    url = BASE_CATEGORY_URL.format(page_number)
+    # Örn: https://www.ardaninmutfagi.com/category/et-yemekleri/page/2/
+    url = f"{category_url}/page/{page_number}/"
 
   try:
     response = requests.get(url, headers=HEADERS, timeout=10)
     if response.status_code != 200:
-      return []
+      return []  # Sayfa yoksa (örn: 404) boş liste döndür
 
     soup = BeautifulSoup(response.text, "html.parser")
     links = set()
@@ -78,7 +104,7 @@ def parse_recipe_detail(recipe_url):
     if not yemek_adi:
       return None
 
-    # 2. Malzemeler (Kesinlikle \n kalmayacak şekilde virgülle birleştirilir ve başlıklar ayıklanır)
+    # 2. Malzemeler (Başlıklar temizlenir ve virgüllü formata dönüştürülür)
     mlz_div = soup.find("div", class_="mlz")
     malzemeler = ""
     if mlz_div:
@@ -88,7 +114,6 @@ def parse_recipe_detail(recipe_url):
       cleaned_items = []
       for line in lines:
         line_lower = line.lower()
-        # "Malzemeleri" veya ara başlık içeren satırları tamamen ele
         if (
             "malzemeleri" in line_lower
             or "için malzemeler" in line_lower
@@ -98,7 +123,6 @@ def parse_recipe_detail(recipe_url):
         if yemek_adi and yemek_adi.lower() in line_lower:
           continue
 
-        # Satır içindeki olası virgüllere göre de parçala
         sub_parts = line.split(",")
         for part in sub_parts:
           p_clean = part.strip()
@@ -108,7 +132,6 @@ def parse_recipe_detail(recipe_url):
               continue
             cleaned_items.append(p_clean)
 
-      # Bütün malzemeleri \n yerine aralarına ", " koyarak tek satır yapıyoruz
       malzemeler = ", ".join(cleaned_items)
 
     if not malzemeler:
@@ -143,6 +166,7 @@ def main():
   scraped_links = set()
   scraped_titles = set()
 
+  # Daha önceden oluşmuş rec.json varsa yükle (kaldığı yerden devam etme)
   if os.path.exists(OUTPUT_FILE):
     try:
       with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
@@ -150,42 +174,68 @@ def main():
         for item in all_recipes:
           if "yemek adı" in item:
             scraped_titles.add(item["yemek adı"])
+      print(
+          f"Daha önceden çekilmiş {len(all_recipes)} tarif dosyadan yüklendi."
+      )
     except:
       pass
 
-  print(f"=== İLK {TOTAL_PAGES} SAYFA İÇİN TARİF ÇEKME İŞLEMİ BAŞLATILDI ===")
+  print("=== ARDA'NIN MUTFAĞI TÜM ARŞİVİ ÇEKME İŞLEMİ BAŞLATILDI ===")
   sys.stdout.flush()
 
-  for page in range(1, TOTAL_PAGES + 1):
-    print(f"\n[Sayfa {page}/{TOTAL_PAGES}] taranıyor...")
+  # 1. 15 Ana Kategoriyi Al
+  categories = get_main_categories()
+  if not categories:
+    print("Hiç kategori bulunamadı, işlem sonlandırılıyor.")
+    return
+
+  # 2. Her kategoriyi ve sayfalarını tara
+  for idx, cat_url in enumerate(categories, 1):
+    print(f"\n--- Kategori [{idx}/{len(categories)}]: {cat_url} ---")
     sys.stdout.flush()
 
-    links = get_recipe_links_from_page(page)
-    print(f"-> Bulunan temiz tarif linki sayısı: {len(links)}")
-    sys.stdout.flush()
+    page = 1
+    while True:
+      links = get_recipe_links_from_category_page(cat_url, page)
 
-    for link in links:
-      if link not in scraped_links:
-        scraped_links.add(link)
-        recipe_data = parse_recipe_detail(link)
+      # Eğer bu sayfada hiç tarif linki bulunamadıysa, bu kategorinin sonuna gelinmiştir
+      if not links:
+        break
 
-        if recipe_data:
-          yemek_adi = recipe_data["yemek adı"]
+      print(
+          f"  [Sayfa {page}] Bulunan temiz tarif linki sayısı: {len(links)}"
+      )
+      sys.stdout.flush()
 
-          if yemek_adi not in scraped_titles:
-            scraped_titles.add(yemek_adi)
-            all_recipes.append(recipe_data)
+      new_recipes_on_page = 0
+      for link in links:
+        if link not in scraped_links:
+          scraped_links.add(link)
+          recipe_data = parse_recipe_detail(link)
 
-            with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-              json.dump(all_recipes, f, ensure_ascii=False, indent=4)
+          if recipe_data:
+            yemek_adi = recipe_data["yemek adı"]
 
-            print(f"   [BAŞARILI ve KAYDEDİLDİ] {yemek_adi}")
-            sys.stdout.flush()
+            if yemek_adi not in scraped_titles:
+              scraped_titles.add(yemek_adi)
+              all_recipes.append(recipe_data)
+              new_recipes_on_page += 1
 
-          time.sleep(0.05)
+              # Her başarılı tarifte rec.json dosyasına anında yaz
+              with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+                json.dump(all_recipes, f, ensure_ascii=False, indent=4)
+
+              print(f"     [BAŞARILI ve KAYDEDİLDİ] {yemek_adi}")
+              sys.stdout.flush()
+
+            time.sleep(0.05)  # Sunucuyu yormamak için kısa bekleme
+
+      # Eğer bu sayfadaki tüm linkler daha önce taranmışsa ve yeni tarif gelmediyse sonraki kategoriye geçilebilir
+      # Yine de emin olmak için sayfaları artırmaya devam ediyoruz (sayfa boş dönünce break oluyor)
+      page += 1
 
   print(
-      f"\n=== İŞLEM TAMAMLANDI! Toplam {len(all_recipes)} tarif"
+      f"\n=== İŞLEM TAMAMLANDI! Toplam {len(all_recipes)} benzersiz tarif"
       f" {OUTPUT_FILE} dosyasına kaydedildi. ==="
   )
   sys.stdout.flush()

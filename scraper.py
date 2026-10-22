@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 import os
+import sys
 import time
 from bs4 import BeautifulSoup
 import requests
@@ -20,7 +21,6 @@ HEADERS = {
 
 
 def get_recipe_links_from_page(page_number):
-  """Belirtilen sayfadaki tarif linklerini çeker."""
   if page_number == 1:
     url = "https://www.ardaninmutfagi.com/category/ramazan-tarifleri/"
   else:
@@ -29,7 +29,8 @@ def get_recipe_links_from_page(page_number):
   try:
     response = requests.get(url, headers=HEADERS, timeout=15)
     if response.status_code != 200:
-      print(f"Sayfa okunamadı: {url} (Status: {response.status_code})")
+      print(f"-> Sayfa okunamadı: {url} (Status: {response.status_code})")
+      sys.stdout.flush()
       return []
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -47,12 +48,12 @@ def get_recipe_links_from_page(page_number):
 
     return list(dict.fromkeys(links))
   except Exception as e:
-    print(f"Sayfa çekilirken hata oluştu {url}: {e}")
+    print(f"-> Sayfa çekilirken hata oluştu {url}: {e}")
+    sys.stdout.flush()
     return []
 
 
 def parse_recipe_detail(recipe_url):
-  """Tarif sayfasından başlık, malzemeler ve açıklama bilgisini çeker."""
   try:
     response = requests.get(recipe_url, headers=HEADERS, timeout=15)
     if response.status_code != 200:
@@ -90,7 +91,6 @@ def parse_recipe_detail(recipe_url):
     }
 
   except Exception as e:
-    print(f"Tarif detay hatası ({recipe_url}): {e}")
     return None
 
 
@@ -98,38 +98,40 @@ def main():
   all_recipes = []
   scraped_links = set()
 
-  print("Veri çekme işlemi başlatılıyor...")
+  print("=== VERİ ÇEKME İŞLEMİ BAŞLATILDI ===")
+  sys.stdout.flush()
 
   for page in range(1, TOTAL_PAGES + 1):
-    print(
-        f"Sayfa işleniyor: {page} / {TOTAL_PAGES}"
-        f" (Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')})"
-    )
+    print(f"\n[Sayfa {page}/{TOTAL_PAGES}] taranıyor...")
+    sys.stdout.flush()
+
     links = get_recipe_links_from_page(page)
+    print(f"-> Bu sayfada {len(links)} link bulundu.")
+    sys.stdout.flush()
 
     for link in links:
       if link not in scraped_links:
         scraped_links.add(link)
-        try:
-          recipe_data = parse_recipe_detail(link)
-          if recipe_data:
-            all_recipes.append(recipe_data)
-        except Exception as err:
-          print(f"Link işlenirken atlandı {link}: {err}")
-        time.sleep(0.3)  # Sunucuyu yormamak için kısa bekleme
+        recipe_data = parse_recipe_detail(link)
+        if recipe_data:
+          all_recipes.append(recipe_data)
+          # Hangi yemeği çektiğini ekrana yazdırıyoruz (anlık takip için)
+          print(f"   [BAŞARILI] {recipe_data['yemek adı']}")
+          sys.stdout.flush()
+        time.sleep(0.2)
 
   # rec.json dosyasına kaydet
   try:
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
       json.dump(all_recipes, f, ensure_ascii=False, indent=4)
     print(
-        f"İşlem tamamlandı! Toplam {len(all_recipes)} tarif {OUTPUT_FILE} dosyasına"
-        " kaydedildi."
+        f"\n=== İŞLEM TAMAMLANDI! Toplam {len(all_recipes)} tarif"
+        f" {OUTPUT_FILE} dosyasına yazıldı. ==="
     )
+    sys.stdout.flush()
   except Exception as e:
-    print(f"JSON dosyası kaydedilirken hata oluştu: {e}")
-    # Dosya yazılamazsa exit code 2 vererek çökmesini önlemek için kritik değilse geçebiliriz
-    # ama ana hata genelde request veya parsing sırasında patlamasıdır.
+    print(f"JSON kaydedilirken hata: {e}")
+    sys.stdout.flush()
 
 
 if __name__ == "__main__":

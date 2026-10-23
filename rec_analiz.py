@@ -56,9 +56,9 @@ def analiz_et():
         """
 
         try:
-            # Model adı güncellendi
+            # Güncel model adı kullanıldı
             response = client.models.generate_content(
-                model='gemini-2.0-flash',
+                model='gemini-3.8-flash',
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.2,

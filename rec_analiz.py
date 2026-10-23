@@ -33,7 +33,6 @@ def analiz_et():
         malzemeler = row.get("malzeme", row.get("malzemeler", ""))
         tarif = row.get("tarif", row.get("aciklama", ""))
 
-        # Miktarların dikkate alınması için güncellenmiş diyetisyen promptu
         prompt = f"""
         Sen uzman bir beslenme ve diyetetik uzmanısın. USDA (FoodData Central) veritabanı standartlarına dayalı olarak aşağıdaki tarifi analiz et.
         DİKKAT: Malzemelerin yanında yazan miktarları (örn. gram, su bardağı, adet, kaşık vb.) tek tek hesaba katarak porsiyon başına düşen toplam kaloriyi hassas bir şekilde hesapla.
@@ -57,8 +56,9 @@ def analiz_et():
         """
 
         try:
+            # Model adı güncellendi
             response = client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-2.0-flash',
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.2,

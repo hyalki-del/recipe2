@@ -17,39 +17,34 @@ def analiz_et():
     output_file = "rec_analiz_sonuc.csv"
 
     if not os.path.exists(input_file):
-        print(f"Hata: '{input_file' dosyası kök dizinde bulunamadı.")
+        print(f"Hata: '{input_file}' dosyası kök dizinde bulunamadı.")
         return
 
     df = pd.read_csv(input_file)
     
     kaloriler = []
-    k1_list = []
-    k2_list = []
-    k3_list = []
-    k4_list = []
-    k5_list = []
-    k6_list = []
-    k7_list = []
+    k1_list, k2_list, k3_list, k4_list, k5_list, k6_list, k7_list = [], [], [], [], [], [], []
     yorumlar = []
 
-    print("Yapay zeka beslenme uzmanı analizi başlatılıyor...")
+    print("Yapay zeka beslenme uzmanı, miktar analizli kalori hesabını başlatıyor...")
 
     for index, row in df.iterrows():
-        # Kolon isimlerinizin rec.csv içindeki yapısına göre esnek okunması
         yemek_adi = row.get("yemek_adi", row.get("isim", "Bilinmeyen Yemek"))
         malzemeler = row.get("malzeme", row.get("malzemeler", ""))
         tarif = row.get("tarif", row.get("aciklama", ""))
 
+        # Miktarların dikkate alınması için güncellenmiş diyetisyen promptu
         prompt = f"""
-        Sen uzman bir beslenme ve diyetetik uzmanısın. USDA (FoodData Central) veritabanı standartlarına dayalı olarak aşağıdaki yemeği analiz et ve JSON formatında yanıt ver:
+        Sen uzman bir beslenme ve diyetetik uzmanısın. USDA (FoodData Central) veritabanı standartlarına dayalı olarak aşağıdaki tarifi analiz et.
+        DİKKAT: Malzemelerin yanında yazan miktarları (örn. gram, su bardağı, adet, kaşık vb.) tek tek hesaba katarak porsiyon başına düşen toplam kaloriyi hassas bir şekilde hesapla.
         
         Yemek Adı: {yemek_adi}
-        Malzemeler: {malzemeler}
+        Malzemeler ve Miktarları: {malzemeler}
         Tarif / Açıklama: {tarif}
         
         Lütfen şu alanları içeren saf bir JSON objesi döndür (başka hiçbir metin veya markdown etiketi ekleme):
         {{
-          "kalori": <porsiyon başına toplam tahmini kalori sayısal değeri>,
+          "kalori": <malzeme miktarları hesaba katılarak hesaplanmış toplam porsiyon kalorisi sayısal değeri>,
           "kriter_1_makro_mikro": <1 ile 5 arasında puan (protein, karbonhidrat, yağ dengesi ve mikro besin kalitesi)>,
           "kriter_2_enerji_yogunlugu": <1 ile 5 arasında puan (enerji yoğunluğu / kalori kontrolü uygunluğu)>,
           "kriter_3_glisemik_indeks": <1 ile 5 arasında puan (kan şekerini dengeleme / düşük glisemik yük potansiyeli)>,
@@ -57,7 +52,7 @@ def analiz_et():
           "kriter_5_volumetrik": <1 ile 5 arasında puan (hacim / tokluk hissi yaratma kapasitesi)>,
           "kriter_6_islenmislik": <1 ile 5 arasında puan (işlenmemiş/doğal gıda oranı, katkı maddesiz olma)>,
           "kriter_7_saglik_surdurulebilirlik": <1 ile 5 arasında puan (klinik uyumluluk, metabolik sağlık ve sürdürülebilirlik skoru)>,
-          "uzman_yorumu": "<Diyetisyen gözüyle kısa ve profesyonel değerlendirme cümlesi>"
+          "uzman_yorumu": "<Miktar ve içerik odaklı kısa ve profesyonel diyetisyen değerlendirmesi>"
         }}
         """
 
@@ -71,7 +66,7 @@ def analiz_et():
             )
             text_resp = response.text.strip()
             
-            # Markdown temizliği (varsa)
+            # Markdown temizliği
             if text_resp.startswith("```json"):
                 text_resp = text_resp[7:]
             if text_resp.endswith("```"):
@@ -102,9 +97,9 @@ def analiz_et():
             k7_list.append(None)
             yorumlar.append("Analiz hatası")
             
-        time.sleep(0.5) # API hız sınırlarını korumak için kısa bekleme
+        time.sleep(0.5)
 
-    # Yeni kolonları DataFrame'e ekle
+    # Kolonları ekle
     df["kalori"] = kaloriler
     df["kriter_1_makro_mikro"] = k1_list
     df["kriter_2_enerji_yogunlugu"] = k2_list
@@ -116,7 +111,7 @@ def analiz_et():
     df["uzman_yorumu"] = yorumlar
 
     df.to_csv(output_file, index=False, encoding='utf-8')
-    print(f"İşlem tamamlandı. Sonuçlar '{output_file}' dosyasına kaydedildi.")
+    print(f"İşlem tamamlandı. Miktar analizli sonuçlar '{output_file}' dosyasına kaydedildi.")
 
 if __name__ == "__main__":
     analiz_et()

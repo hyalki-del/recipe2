@@ -1,18 +1,21 @@
 import csv
-import re
 
 def process_data(input_file, output_file):
     cleaned_rows = []
     
-    with open(input_file, mode='r', encoding='utf-8') as f:
-        reader = f.readlines()
+    try:
+        with open(input_file, mode='r', encoding='utf-8') as f:
+            reader = f.readlines()
+    except FileNotFoundError:
+        print(f"Hata: '{input_file}' dosyası bulunamadı.")
+        return
         
     for line in reader:
         line = line.strip()
         if not line:
             continue
             
-        # Başlıktaki 'malzeme' kelimesini atlayalım (eğer varsa)
+        # Başlıktaki 'malzeme' kelimesini atlayalım
         if line.lower() == 'malzeme':
             continue
             
@@ -26,7 +29,6 @@ def process_data(input_file, output_file):
         # Satırdaki kelimeleri ayır
         words = line.split()
         if not words:
-            # Sadece "-" içeren veya boş kalan satırlar için detay varsa kaydedelim
             if detay:
                 cleaned_rows.append({
                     "birim": "",
@@ -35,12 +37,8 @@ def process_data(input_file, output_file):
                 })
             continue
             
-        # 1. & 2. Kural: Malzeme genelde son 1 veya 2 kelime
-        # (Örn: "su bardağı yoğurt" -> birim: "su bardağı", malzeme: "yoğurt")
-        # Tek kelimelik malzemeler için (örn: "Tuz") kontrol
+        # 1. & 2. Kural: Malzeme genelde son 1 veya 2 kelime, kalanı birim
         if len(words) >= 2:
-            # Son kelime veya bazı durumlarda son 2 kelime malzeme olabilir. 
-            # Verinizin yapısına göre son 2 kelimeyi malzeme kabul ediyoruz:
             malzeme = " ".join(words[-2:])
             birim = " ".join(words[:-2])
         else:
@@ -53,7 +51,7 @@ def process_data(input_file, output_file):
             "detay": detay
         })
 
-    # Sonuçları temizlenmiş_malzemeler.csv olarak kaydet
+    # Sonuçları 'tm_ay.csv' olarak kaydet
     with open(output_file, mode='w', encoding='utf-8', newline='') as f:
         fieldnames = ["birim", "malzeme", "detay"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -63,10 +61,8 @@ def process_data(input_file, output_file):
             writer.writerow(row)
 
 if __name__ == "__main__":
-    # Yüklediğiniz dosyanın adı
-    input_filename = "temizlenmiş_malzemeler.csv" 
-    output_filename = "temizlenmiş_malzemeler.csv" # Aynı dosy üzerine yazabilir veya yeni dosya yapabilirsiniz
+    input_filename = "temizlenmis_malzemeler.csv" # Girdi dosyanız
+    output_filename = "tm_ay.csv"                 # Çıktı dosyanız
     
-    # Not: Eğer girdi dosyanızın adı farklıysa (örn: ham_veriler.csv), burayı değiştirebilirsiniz.
-    process_data("ham_veri.csv", output_filename)
+    process_data(input_filename, output_filename)
     print(f"İşlem tamamlandı. Sonuç '{output_filename}' dosyasına kaydedildi.")

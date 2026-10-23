@@ -1,0 +1,38 @@
+name: Yemek Tarifi Beslenme Analizi
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Manuel tetikleme için
+
+jobs:
+  analyze-recipes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repo'yu Kopyala (Checkout)
+        uses: actions/checkout@v4
+
+      - name: Python Ortamını Kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Gerekli Kütüphaneleri Yükle
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas google-genai
+
+      - name: Analiz Scriptini Çalıştır
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python rec_analiz.py
+
+      - name: Sonuçları Git'e Ekle ve Kaydet
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add rec_analiz_sonuc.csv
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Otomatik Diyetisyen Analizi: rec_analiz_sonuc.csv güncellendi" && git push)
